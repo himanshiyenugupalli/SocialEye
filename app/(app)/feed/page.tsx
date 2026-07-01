@@ -4,22 +4,43 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import IssueCard from '@/components/issue-card'
 import { IssueSkeleton } from '@/components/skeleton'
-import { mockIssues } from '@/lib/mock-data'
 import { Filter } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
 type FilterCategory = 'all' | 'reported' | 'verified' | 'assigned' | 'in-progress' | 'resolved'
 
 export default function FeedPage() {
   const [loading, setLoading] = useState(true)
-  const [issues, setIssues] = useState(mockIssues)
+  const [issues, setIssues] = useState<any[]>([])
   const [activeFilter, setActiveFilter] = useState<FilterCategory>('all')
 
   useEffect(() => {
-    // Simulate API loading
-    const timer = setTimeout(() => {
+    const fetchIssues = async () => {
+      setLoading(true)
+      const { data, error } = await supabase
+        .from('reports')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (data) {
+        const formatted = data.map(r => ({
+          id: r.id,
+          title: r.title,
+          category: r.category,
+          status: r.status.toLowerCase(),
+          location: r.location || 'Unknown location',
+          description: r.description,
+          image: r.image_url || null,
+          verifications: 1,
+          time: new Date(r.created_at).toLocaleDateString(),
+          reporter: { name: 'Citizen', avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${r.id}` }
+        }))
+        setIssues(formatted)
+      }
       setLoading(false)
-    }, 800)
-    return () => clearTimeout(timer)
+    }
+
+    fetchIssues()
   }, [])
 
   const filteredIssues = activeFilter === 'all' 

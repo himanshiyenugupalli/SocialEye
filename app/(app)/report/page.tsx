@@ -12,13 +12,19 @@ import {
   AlertTriangle,
   Camera
 } from 'lucide-react'
+import { useAuth } from '@/providers/auth-context'
+import { supabase } from '@/lib/supabase'
 
 export default function ReportPage() {
   const router = useRouter()
+  const { user } = useAuth()
   
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState('')
+  const [file, setFile] = useState<File | null>(null)
+  const [preview, setPreview] = useState<string | null>(null)
+  const [location, setLocation] = useState('123 Civic Ave, Downtown')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
   
@@ -31,20 +37,71 @@ export default function ReportPage() {
     'Other'
   ]
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const selected = e.target.files[0]
+      setFile(selected)
+      setPreview(URL.createObjectURL(selected))
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!title || !category || !description) return
     setIsSubmitting(true)
     
-    // Simulate API call
-    setTimeout(() => {
-      setIsSubmitting(false)
+    try {
+      let imageUrl = null
+
+      // 1. Upload image to Supabase Storage if selected
+      if (file) {
+        const fileExt = file.name.split('.').pop()
+        const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('reports')
+          .upload(fileName, file)
+
+        if (uploadError) throw uploadError
+
+        const { data: publicUrlData } = supabase.storage
+          .from('reports')
+          .getPublicUrl(fileName)
+
+        imageUrl = publicUrlData.publicUrl
+      }
+
+      // 2. Submit to our API for Gemini Analysis and DB Insert
+      const res = await fetch('/api/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          description,
+          category,
+          location,
+          image_url: imageUrl,
+          user_id: user?.id
+        })
+      })
+
+      if (!res.ok) {
+        throw new Error('Failed to submit report')
+      }
+
       setIsSuccess(true)
       
       // Auto redirect after success
       setTimeout(() => {
         router.push('/feed')
       }, 2000)
-    }, 1500)
+
+    } catch (error) {
+      console.error(error)
+      alert('Failed to submit report. Ensure Supabase storage is setup correctly.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -126,14 +183,28 @@ export default function ReportPage() {
               <label className="text-sm font-semibold text-slate-text flex items-center gap-2">
                 <Camera className="w-4 h-4" /> Add Photos & Videos
               </label>
-              <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-primary/30 rounded-2xl bg-primary/5 hover:bg-primary/10 transition-colors cursor-pointer group">
-                <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                  <UploadCloud className="w-10 h-10 text-primary mb-3 group-hover:scale-110 transition-transform" />
-                  <p className="mb-1 text-sm text-slate-text font-medium"><span className="text-primary font-bold">Click to upload</span> or drag and drop</p>
-                  <p className="text-xs text-slate-mid">SVG, PNG, JPG or MP4 (MAX. 50MB)</p>
+              
+              {preview ? (
+                <div className="relative w-full h-48 rounded-2xl overflow-hidden border border-white/20">
+                  <img src={preview} alt="Preview" className="w-full h-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => { setFile(null); setPreview(null); }}
+                    className="absolute top-2 right-2 p-1.5 bg-black/50 hover:bg-black/80 rounded-full text-white transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
-                <input type="file" className="hidden" multiple accept="image/*,video/*" />
-              </label>
+              ) : (
+                <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-primary/30 rounded-2xl bg-primary/5 hover:bg-primary/10 transition-colors cursor-pointer group">
+                  <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                    <UploadCloud className="w-10 h-10 text-primary mb-3 group-hover:scale-110 transition-transform" />
+                    <p className="mb-1 text-sm text-slate-text font-medium"><span className="text-primary font-bold">Click to upload</span> or drag and drop</p>
+                    <p className="text-xs text-slate-mid">SVG, PNG, JPG (MAX. 5MB)</p>
+                  </div>
+                  <input type="file" onChange={handleFileChange} className="hidden" accept="image/*" />
+                </label>
+              )}
             </div>
 
             {/* Location */}

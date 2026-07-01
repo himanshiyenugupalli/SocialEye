@@ -3,26 +3,27 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { DashboardSkeleton } from '@/components/skeleton'
-import { mockIssues } from '@/lib/mock-data'
 import { TrendingUp, AlertCircle, CheckCircle2, Clock } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
+  const [issues, setIssues] = useState<any[]>([])
 
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 800)
-    return () => clearTimeout(timer)
+    const fetchIssues = async () => {
+      const { data } = await supabase.from('reports').select('*')
+      if (data) setIssues(data)
+      setLoading(false)
+    }
+    fetchIssues()
   }, [])
 
-  // Calculate stats
-  const totalIssues = mockIssues.length
-  const resolvedIssues = mockIssues.filter(i => i.status === 'resolved').length
-  const inProgressIssues = mockIssues.filter(i => i.status === 'in-progress').length
-  const resolutionRate = Math.round((resolvedIssues / totalIssues) * 100)
-
-  const avgResponseDays = 2.5
-  const topCategory = 'Road Damage'
-  const improvementTrend = 12
+  // Calculate stats dynamically from Supabase
+  const totalIssues = issues.length
+  const resolvedIssues = issues.filter(i => i.status?.toLowerCase() === 'resolved').length
+  const inProgressIssues = issues.filter(i => i.status?.toLowerCase() === 'in-progress' || i.status?.toLowerCase() === 'assigned').length
+  const resolutionRate = totalIssues > 0 ? Math.round((resolvedIssues / totalIssues) * 100) : 0
 
   const kpis = [
     {
@@ -30,31 +31,39 @@ export default function DashboardPage() {
       value: totalIssues,
       icon: AlertCircle,
       color: 'from-amber-500 to-amber-600',
-      trend: '+5 this week',
+      trend: 'Live Data',
     },
     {
       label: 'Resolution Rate',
       value: `${resolutionRate}%`,
       icon: CheckCircle2,
       color: 'from-green-500 to-green-600',
-      trend: 'Up 3%',
+      trend: 'Live Data',
     },
     {
       label: 'In Progress',
       value: inProgressIssues,
       icon: Clock,
       color: 'from-blue-500 to-blue-600',
-      trend: 'Avg 2.5 days',
+      trend: 'Live Data',
     },
   ]
 
-  const categoryData = [
-    { name: 'Road Damage', count: 3, resolved: 1 },
-    { name: 'Lighting', count: 1, resolved: 0 },
-    { name: 'Graffiti', count: 1, resolved: 0 },
-    { name: 'Litter', count: 1, resolved: 0 },
-    { name: 'Trees', count: 1, resolved: 1 },
-  ]
+  // Dynamic category data
+  const categoryMap = new Map()
+  issues.forEach(i => {
+    const cat = i.category
+    if (!categoryMap.has(cat)) {
+      categoryMap.set(cat, { name: cat, count: 0, resolved: 0 })
+    }
+    const data = categoryMap.get(cat)
+    data.count++
+    if (i.status?.toLowerCase() === 'resolved') {
+      data.resolved++
+    }
+  })
+  
+  const categoryData = Array.from(categoryMap.values()).sort((a, b) => b.count - a.count)
 
   const wards = [
     { name: 'Downtown', issues: 4, resolved: 2, improvement: 'Up 15%' },

@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
 
 interface User {
   id: string
@@ -14,7 +15,7 @@ interface AuthContextType {
   user: User | null
   isAuthenticated: boolean
   isLoading: boolean
-  login: (email: string, password: string, rememberMe?: boolean) => Promise<void>
+  login: (email: string, password: string) => Promise<void>
   signup: (email: string, password: string, name: string) => Promise<void>
   logout: () => void
 }
@@ -26,72 +27,79 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
 
-  // Check for saved user on mount
   useEffect(() => {
-    const savedUser = localStorage.getItem('user') || sessionStorage.getItem('user')
-    if (savedUser) {
-      try {
-        setUser(JSON.parse(savedUser))
-      } catch {
-        localStorage.removeItem('user')
-        sessionStorage.removeItem('user')
+    // Get initial session
+    const initializeAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user) {
+        setUser({
+          id: session.user.id,
+          email: session.user.email!,
+          name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
+          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${session.user.email}`,
+        })
       }
+      setIsLoading(false)
     }
-    setIsLoading(false)
+
+    initializeAuth()
+
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setUser({
+          id: session.user.id,
+          email: session.user.email!,
+          name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0],
+          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${session.user.email}`,
+        })
+      } else {
+        setUser(null)
+      }
+      setIsLoading(false)
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
   }, [])
 
-  const login = async (email: string, password: string, rememberMe: boolean = false) => {
-    // Mock login - in production, this would call your API
-    if (!email || !password) {
-      throw new Error('Email and password are required')
-    }
-
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500))
-
-    const mockUser: User = {
-      id: Math.random().toString(36).substr(2, 9),
+  const login = async (email: string, password: string) => {
+    setIsLoading(true)
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
-      name: email.split('@')[0],
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`,
-    }
-
-    setUser(mockUser)
+      password,
+    })
+    setIsLoading(false)
     
-    if (rememberMe) {
-      localStorage.setItem('user', JSON.stringify(mockUser))
-    } else {
-      sessionStorage.setItem('user', JSON.stringify(mockUser))
+    if (error) {
+      throw error
     }
   }
 
   const signup = async (email: string, password: string, name: string) => {
-    if (!email || !password || !name) {
-      throw new Error('All fields are required')
-    }
-
-    if (password.length < 6) {
-      throw new Error('Password must be at least 6 characters')
-    }
-
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500))
-
-    const mockUser: User = {
-      id: Math.random().toString(36).substr(2, 9),
+    setIsLoading(true)
+    const { data, error } = await supabase.auth.signUp({
       email,
-      name,
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${email}`,
-    }
+      password,
+      options: {
+        data: {
+          full_name: name,
+        }
+      }
+    })
+    setIsLoading(false)
 
-    setUser(mockUser)
-    localStorage.setItem('user', JSON.stringify(mockUser))
+    if (error) {
+      throw error
+    }
   }
 
-  const logout = () => {
+  const logout = async () => {
+    setIsLoading(true)
+    await supabase.auth.signOut()
     setUser(null)
-    localStorage.removeItem('user')
-    sessionStorage.removeItem('user')
+    setIsLoading(false)
     router.replace('/auth/login')
   }
 

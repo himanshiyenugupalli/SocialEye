@@ -2,24 +2,28 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { mockUser } from '@/lib/mock-data'
+import { useAuth } from '@/providers/auth-context'
 import { Award, Zap, Trophy, Heart, CheckCircle2, User, LogOut, Edit2, Save, X } from 'lucide-react'
 
 export default function ProfilePage() {
+  const { user } = useAuth()
   const [loading, setLoading] = useState(true)
   const [newBadge, setNewBadge] = useState<string | null>(null)
   
   const [isEditing, setIsEditing] = useState(false)
   const [editForm, setEditForm] = useState({
-    name: mockUser.name,
+    name: user?.name || 'Citizen',
     bio: 'Civic tech enthusiast looking to improve our local neighborhood.',
-    location: mockUser.neighborhood
+    location: 'Downtown'
   })
 
   useEffect(() => {
+    if (user && editForm.name === 'Citizen') {
+      setEditForm(prev => ({ ...prev, name: user.name }))
+    }
     const timer = setTimeout(() => setLoading(false), 600)
     return () => clearTimeout(timer)
-  }, [])
+  }, [user])
 
   const badges = [
     { id: 'early-adopter', name: 'Early Adopter', description: 'Joined within the first month', icon: Zap, color: 'from-yellow-500 to-amber-500', unlocked: true },
@@ -103,7 +107,7 @@ export default function ProfilePage() {
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.15 }}
                 >
-                  {editForm.location} • Rank #{mockUser.rank}
+                  {editForm.location} • Rank #12
                 </motion.p>
 
                 <motion.p
@@ -147,7 +151,7 @@ export default function ProfilePage() {
               transition={{ delay: 0.2, type: 'spring' }}
             >
               <p className="text-sm text-slate-mid mb-1 font-medium">Civic Points</p>
-              <p className="text-4xl font-bold text-primary mb-3">{mockUser.civicPoints}</p>
+              <p className="text-4xl font-bold text-primary mb-3">2840</p>
               <motion.div
                 className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden"
                 initial={{ width: 0 }}
