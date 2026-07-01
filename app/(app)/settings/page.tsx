@@ -1,23 +1,46 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Settings, Bell, Lock, Shield, User, Save, CheckCircle2 } from 'lucide-react'
+import { useAuth } from '@/providers/auth-context'
+import { supabase } from '@/lib/supabase'
 
 export default function SettingsPage() {
+  const { user } = useAuth()
   const [pushEnabled, setPushEnabled] = useState(true)
   const [emailEnabled, setEmailEnabled] = useState(false)
   const [locationEnabled, setLocationEnabled] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [showSaved, setShowSaved] = useState(false)
+  const [name, setName] = useState('')
+  const [phone, setPhone] = useState('')
 
-  const handleSave = () => {
+  useEffect(() => {
+    if (user) {
+      setName(user.name || '')
+      // You could also fetch phone from user_metadata if it exists
+    }
+  }, [user])
+
+  const handleSave = async () => {
     setIsSaving(true)
-    setTimeout(() => {
+    try {
+      const { error } = await supabase.auth.updateUser({
+        data: { full_name: name, phone: phone }
+      })
+      
+      if (!error) {
+        setShowSaved(true)
+        setTimeout(() => setShowSaved(false), 3000)
+      } else {
+        console.error('Failed to update user', error)
+      }
+    } catch (err) {
+      console.error(err)
+    } finally {
       setIsSaving(false)
-      setShowSaved(true)
-      setTimeout(() => setShowSaved(false), 3000)
-    }, 1000)
+    }
   }
 
   const Toggle = ({ enabled, onChange }: { enabled: boolean, onChange: (val: boolean) => void }) => (
@@ -76,12 +99,32 @@ export default function SettingsPage() {
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1">
+                  <label className="text-sm font-medium text-slate-text">Full Name</label>
+                  <input 
+                    type="text" 
+                    value={name} 
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full px-4 py-2 rounded-xl bg-white/50 dark:bg-black/20 border border-white/30 focus:border-primary outline-none transition-all" 
+                  />
+                </div>
+                <div className="space-y-1">
                   <label className="text-sm font-medium text-slate-text">Email Address</label>
-                  <input type="email" defaultValue="user@example.com" className="w-full px-4 py-2 rounded-xl bg-white/50 dark:bg-black/20 border border-white/30 focus:border-primary outline-none transition-all" />
+                  <input 
+                    type="email" 
+                    value={user?.email || ''} 
+                    disabled
+                    className="w-full px-4 py-2 rounded-xl bg-white/30 dark:bg-black/10 border border-white/20 text-slate-500 cursor-not-allowed outline-none transition-all" 
+                  />
                 </div>
                 <div className="space-y-1">
                   <label className="text-sm font-medium text-slate-text">Phone Number</label>
-                  <input type="tel" defaultValue="+1 234 567 8900" className="w-full px-4 py-2 rounded-xl bg-white/50 dark:bg-black/20 border border-white/30 focus:border-primary outline-none transition-all" />
+                  <input 
+                    type="tel" 
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="+1 234 567 8900" 
+                    className="w-full px-4 py-2 rounded-xl bg-white/50 dark:bg-black/20 border border-white/30 focus:border-primary outline-none transition-all" 
+                  />
                 </div>
               </div>
               <div className="pt-2">
